@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule, ObserveInstrument } from './app.module.js';
 import { Logger } from 'nestjs-pino';
 import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieSession from 'cookie-session';
 
 async function bootstrap() {
@@ -16,6 +17,24 @@ async function bootstrap() {
   const logger = app.get(Logger);
   app.useLogger(logger);
   app.setGlobalPrefix('api');
+
+  // 1.2 CORS
+  app.enableCors({
+    origin: configService.getOrThrow<string>('FRONTEND_URL'),
+    credentials: true,
+  });
+
+  // 1.5 Swagger Documentation
+  const config = new DocumentBuilder()
+    .setTitle('YouTube to Google Drive API')
+    .setDescription(
+      'Transfer your favorite YouTube videos directly to Google Drive',
+    )
+    .setVersion('1.0')
+    .addCookieAuth('sid')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
   // 2. Cookie session
   const secretKey = configService.get<string>('SECRET_KEY')!;
