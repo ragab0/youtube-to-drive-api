@@ -19,6 +19,11 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // 1.2 CORS
+  console.log(
+    '##############################',
+    configService.getOrThrow<string>('FRONTEND_URL'),
+  );
+
   app.enableCors({
     origin: configService.getOrThrow<string>('FRONTEND_URL'),
     credentials: true,

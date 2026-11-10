@@ -1,5 +1,5 @@
 {
-  "name": "our-api",
+  "name": "yt-drive",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -34,12 +34,14 @@
     "cookie-session": "^2.1.1",
     "crypto": "^1.0.1",
     "google-auth-library": "^11.3.3",
+    "googleapis": "^189.0.0",
     "nestjs-pino": "^5.3.1",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^1.1.2",
+    "yt-dlp-wrap": "^2.3.12",
     "zod": "^4.6.7"
   },
   "devDependencies": {
