@@ -10,6 +10,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     instrument: ObserveInstrument,
     bufferLogs: true,
+    snapshot: true,
   });
 
   // 1. setup configuraiton && loggers && our main prefix
@@ -19,7 +20,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // 1.2 CORS
-  console.log(
+  logger.log(
     '##############################',
     configService.getOrThrow<string>('FRONTEND_URL'),
   );

@@ -11,12 +11,19 @@ import { ConfigModule as AppConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { YoutubeModule } from './youtube/youtube.module.js';
 import { User } from './users/user.entity.js';
+import { DevtoolsModule } from '@nestjs/devtools-integration';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
     AppConfigModule,
+    DevtoolsModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        http: config.get<string>('NODE_ENV') !== 'production',
+      }),
+    }),
     // ObserveModule.forRootAsync({
     //   inject: [ConfigService],
     //   useFactory: (config: ConfigService) => ({
@@ -43,12 +50,16 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        url: config.getOrThrow<string>('DATABASE_URL'),
-        entities: [User],
-        synchronize: config.get<string>('NODE_ENV') === 'development',
-      }),
+      useFactory: (config: ConfigService) => {
+        const isNeon = config.get<string>('DB_PROVIDER') === 'neon';
+        return {
+          type: 'postgres',
+          url: config.getOrThrow<string>('DATABASE_URL'),
+          entities: [User],
+          synchronize: config.get<string>('NODE_ENV') === 'development',
+          ssl: isNeon ? { rejectUnauthorized: false } : false,
+        };
+      },
     }),
     DatabaseModule,
     YoutubeModule,

@@ -124,4 +124,22 @@ export class YoutubeService {
       throw error;
     }
   }
+
+  getDownloadStream(url: string): Readable {
+    const normalizedUrl = this.normalizeUrl(url);
+    // The user provided a specific format preference
+    const format =
+      'bv*[height<=720][ext=mp4]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]';
+
+    return this.ytdlp.execStream([
+      normalizedUrl,
+      '--format',
+      format,
+      '--merge-output-format',
+      'mp4',
+      '--js-runtimes',
+      'node',
+      '--newline',
+    ]);
+  }
 }

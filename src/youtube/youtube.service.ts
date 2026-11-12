@@ -1,23 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import YTDlpWrapModule from 'yt-dlp-wrap';
 import { Readable, PassThrough } from 'stream';
 import { spawn } from 'child_process';
-
-const YTDlpWrap = (YTDlpWrapModule as any).default || YTDlpWrapModule;
 
 @Injectable()
 export class YoutubeService {
   private readonly logger = new Logger(YoutubeService.name);
   private readonly ytdlp: any;
 
-  constructor() {
-    // Assumes yt-dlp is in the system path
-    this.ytdlp = new YTDlpWrap();
-    if (!this.ytdlp) {
-      this.logger.error('Failed to initialize yt-dlp');
-      throw new Error('Failed to initialize yt-dlp');
-    }
-  }
+  constructor() {}
 
   private normalizeUrl(url: string): string {
     if (!url || typeof url !== 'string') return url;
@@ -173,5 +163,64 @@ export class YoutubeService {
         }
       });
     });
+  }
+
+  getDownloadStream(url: string): Readable {
+    const normalizedUrl = this.normalizeUrl(url);
+    const format =
+      'bv*[height<=720][ext=mp4]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]';
+    const args = [
+      normalizedUrl,
+      '--format',
+      format,
+      '--merge-output-format',
+      'mp4',
+      '--js-runtimes',
+      'node',
+      '--no-update',
+      '-o',
+      '-',
+      '--extractor-args',
+      'youtube:player_client=tv,mweb',
+    ];
+
+    const child = spawn('yt-dlp', args);
+    const stream = new PassThrough();
+    let stderr = '';
+
+    child.stdout.pipe(stream);
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    // If yt-dlp exits with an error, propagate it to the stream
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const errorMsg = `yt-dlp exited with code ${code}. Stderr: ${stderr.trim()}`;
+        this.logger.error(errorMsg);
+        stream.emit('error', new Error(errorMsg));
+      } else {
+        stream.end();
+      }
+    });
+
+    child.on('error', (err) => {
+      this.logger.error(`yt-dlp download process error: ${err.message}`);
+      stream.emit('error', err);
+    });
+
+    // Prevent process exit if no one is listening to the error yet
+    stream.on('error', (err) => {
+      this.logger.debug(
+        `Stream error caught by internal listener: ${err.message}`,
+      );
+    });
+
+    // Optional: kill yt-dlp if the client disconnects
+    stream.on('close', () => {
+      if (!child.killed) child.kill('SIGTERM');
+    });
+
+    return stream;
   }
 }

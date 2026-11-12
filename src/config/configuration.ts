@@ -9,6 +9,7 @@ const configSchema = z.object({
     .string()
     .min(44, 'TOKEN_ENCRYPTION_KEY should be a base64 string of 32 bytes'),
   DATABASE_URL: z.url(),
+  DB_PROVIDER: z.enum(['neon', 'local']).default('neon'),
   OBSERVE_APP_KEY: z.string().optional(),
   OBSERVE_APP_SECRET: z.string().optional(),
   FRONTEND_URL: z.url().default('http://localhost:3000'),

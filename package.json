@@ -46,9 +46,12 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
+    "@nestjs/devtools-integration": "^12.0.0",
     "@nestjs/mau": "^0.0.6",
     "@nestjs/schematics": "^12.0.0",
     "@nestjs/testing": "^12.0.1",
+    "@swc/cli": "^0.8.2",
+    "@swc/core": "^1.16.22",
     "@types/cookie-session": "^2.0.49",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
