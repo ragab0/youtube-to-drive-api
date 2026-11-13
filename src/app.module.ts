@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
+import { ConditionalModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -12,6 +12,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { YoutubeModule } from './youtube/youtube.module.js';
 import { User } from './users/user.entity.js';
 import { DevtoolsModule } from '@nestjs/devtools-integration';
+import { HealthModule } from './health/health.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -24,6 +25,10 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         http: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
+    ConditionalModule.registerWhen(
+      HealthModule,
+      (env) => env.NODE_ENV === 'production',
+    ),
     // ObserveModule.forRootAsync({
     //   inject: [ConfigService],
     //   useFactory: (config: ConfigService) => ({
