@@ -20,6 +20,7 @@ const configSchema = z.object({
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
   REDIS_PASSWORD: z.string().optional(),
+  YOUTUBE_API_KEY: z.string().min(1),
 });
 
 export type Config = z.infer<typeof configSchema>;

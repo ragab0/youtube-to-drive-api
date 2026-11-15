@@ -1,13 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { youtube_v3 } from 'googleapis';
 import { Readable, PassThrough } from 'stream';
 import { spawn } from 'child_process';
+import { YOUTUBE_CLIENT } from './youtube.constants.js';
+import { parseYoutubeUrl, toVideo } from './youtube.helpers.js';
 
 @Injectable()
 export class YoutubeService {
   private readonly logger = new Logger(YoutubeService.name);
-  private readonly ytdlp: any;
 
-  constructor() {}
+  constructor(
+    @Inject(YOUTUBE_CLIENT) private readonly youtube: youtube_v3.Youtube,
+  ) {}
 
   private normalizeUrl(url: string): string {
     if (!url || typeof url !== 'string') return url;
@@ -88,81 +98,86 @@ export class YoutubeService {
     return input;
   }
 
+  private async fetchVideos(ids: string[]) {
+    // SPLIT BIG lists into batches consisting of 50 items and each batch as a request (youtube V3 LIMIT)
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+
+    const responses = await Promise.all(
+      chunks.map((chunk) =>
+        this.youtube.videos.list({
+          part: ['snippet', 'contentDetails'],
+          id: chunk,
+          maxResults: 50,
+          fields:
+            'items(id,snippet(title,thumbnails),contentDetails(duration))',
+        }),
+      ),
+    );
+
+    return responses.flatMap((r) => r.data.items ?? []);
+  }
+
   async getInfo(url: string) {
-    const normalizedUrl = this.normalizeUrl(url);
-    return new Promise((resolve, reject) => {
-      this.logger.log(`Fetching info for ${normalizedUrl} (original: ${url})`);
+    this.logger.log(`Fetching info for original url: ${url}`);
 
-      const args = [
-        normalizedUrl,
-        '--dump-json',
-        '--js-runtimes',
-        'node',
-        '--no-update',
-        '--flat-playlist', // Essential for playlists: don't extract every video's full info
-      ];
+    const { videoId, playlistId } = parseYoutubeUrl(url);
 
-      const child = spawn('yt-dlp', args);
+    // 01] If single video
+    if (videoId) {
+      const [video] = await this.fetchVideos([videoId]);
+      if (!video) throw new NotFoundException('Video not found or is private');
+      return { type: 'video', ...toVideo(video) };
+    }
 
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
+    // 02] If playlist ID
+    if (playlistId) {
+      const plRes = await this.youtube.playlists.list({
+        part: ['snippet'],
+        id: [playlistId],
+        fields: 'items(snippet(title))',
       });
+      const playlist = plRes.data.items?.[0]; // get the playlist item with snippet obj;
+      if (!playlist)
+        throw new NotFoundException('Playlist not found or is private');
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code !== 0) {
-          this.logger.error(
-            `yt-dlp failed with code ${code}. Stderr: ${stderr}`,
-          );
-          return reject(new Error(`yt-dlp failed: ${stderr}`));
+      // Collect all video IDs (50 per page)
+      const ids: string[] = [];
+      let pageToken: string | undefined;
+      do {
+        const res = await this.youtube.playlistItems.list({
+          part: ['contentDetails'],
+          playlistId,
+          maxResults: 50,
+          pageToken,
+          fields: 'nextPageToken,items(contentDetails(videoId))',
+        });
+        // get playlist videos once (maxed to 50 in first iteration) with only their ID as the payload
+        // & returns page of next 50 if any and then continue loop;
+        for (const item of res.data.items ?? []) { 
+          if (item.contentDetails?.videoId)
+            ids.push(item.contentDetails.videoId);
         }
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
 
-        try {
-          // yt-dlp might output multiple JSON objects if it's a playlist and --flat-playlist isn't enough
-          // but usually the first object is the playlist metadata or the single video info.
-          const lines = stdout.trim().split('\n');
-          const metadata = JSON.parse(lines[0]);
+      // fetch each batch & fills in our schema
+      const videos = await this.fetchVideos(ids);
+      const byId = new Map(videos.map((v) => [v.id!, v]));
 
-          if (
-            metadata._type === 'playlist' ||
-            Array.isArray(metadata.entries)
-          ) {
-            resolve({
-              type: 'playlist',
-              title: metadata.title,
-              videos: metadata.entries.map((entry: any) => ({
-                id: entry.id,
-                title: entry.title,
-                thumbnail: entry.thumbnail,
-                duration: entry.duration,
-                url:
-                  entry.url ||
-                  entry.webpage_url ||
-                  `https://www.youtube.com/watch?v=${entry.id}`,
-              })),
-            });
-          } else {
-            resolve({
-              type: 'video',
-              id: metadata.id,
-              title: metadata.title,
-              thumbnail: metadata.thumbnail,
-              duration: metadata.duration,
-              url: metadata.webpage_url,
-            });
-          }
-        } catch (e: any) {
-          this.logger.error(`Failed to parse yt-dlp output: ${e.message}`);
-          reject(e);
-        }
-      });
-    });
+      return {
+        type: 'playlist',
+        url: `https://www.youtube.com/playlist?list=${playlistId}`,
+        title: playlist.snippet?.title,
+        videos: ids
+          .map((id) => byId.get(id))
+          .filter((v): v is youtube_v3.Schema$Video => !!v)
+          .map((v) => toVideo(v)),
+      };
+    }
+
+    // 03] If no video or playlist ID
+    throw new BadRequestException('URL has no video or playlist ID');
   }
 
   getDownloadStream(url: string): Readable {
