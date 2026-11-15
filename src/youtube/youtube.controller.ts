@@ -8,11 +8,16 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags, ApiBody } from '@nestjs/swagger';
+import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard.js';
 import { User } from '../users/user.entity.js';
 import { YoutubeService } from './youtube.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
+import {
+  DownloadRequestDto,
+  ExtractRequestDto,
+  ExtractResponseDto,
+} from './youtube.dto.js';
 
 @ApiTags('youtube')
 @UseGuards(AuthGuard)
@@ -25,49 +30,41 @@ export class YoutubeController {
 
   @ApiOperation({
     summary: 'Extract video or playlist details from a YouTube URL',
+    description:
+      'Uses the official YouTube Data API v3 to fetch metadata. Supports videos, playlists, shorts, and live streams.',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', example: 'https://www.youtube.com/watch?v=...' },
-      },
-      required: ['url'],
-    },
+  @ApiResponse({
+    status: 200,
+    description: 'Extracted metadata',
+    type: ExtractResponseDto,
   })
   @Post('extract')
-  async extract(@Body('url') url: string) {
+  async extract(@Body() body: ExtractRequestDto) {
+    const { url } = body;
     if (!url) throw new BadRequestException('URL is required');
     return await this.youtubeService.getInfo(url);
   }
 
-  @ApiOperation({ summary: 'Download videos directly to Google Drive' })
-  @ApiBody({
+  @ApiOperation({
+    summary: 'Download videos directly to Google Drive',
+    description:
+      'Queues a background job to download media and upload it to the specified Drive path.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Job created successfully',
     schema: {
       type: 'object',
       properties: {
-        urls: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'List of YouTube URLs (video or playlist). Playlists are expanded automatically.',
-          example: ['https://www.youtube.com/playlist?list=PL...'],
-        },
-        path: {
-          type: 'string',
-          description: 'Target folder path in Google Drive',
-          example: '/My Downloads/Youtube',
-        },
+        message: { type: 'string' },
+        jobId: { type: 'string' },
+        statusUrl: { type: 'string' },
       },
-      required: ['urls', 'path'],
     },
   })
   @Post('download')
-  async download(
-    @CurrentUser() user: User,
-    @Body('urls') urls: string[],
-    @Body('path') path: string,
-  ) {
+  async download(@CurrentUser() user: User, @Body() body: DownloadRequestDto) {
+    const { urls, path } = body;
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       throw new BadRequestException('At least one URL is required');
     }
