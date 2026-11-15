@@ -13,6 +13,8 @@ import { YoutubeModule } from './youtube/youtube.module.js';
 import { User } from './users/user.entity.js';
 import { DevtoolsModule } from '@nestjs/devtools-integration';
 import { HealthModule } from './health/health.module.js';
+import { BullModule } from '@nestjs/bullmq';
+import { JobsModule } from './jobs/jobs.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -23,6 +25,16 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         http: config.get<string>('NODE_ENV') !== 'production',
+      }),
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST'),
+          port: config.get<number>('REDIS_PORT'),
+          password: config.get<string>('REDIS_PASSWORD'),
+        },
       }),
     }),
     ConditionalModule.registerWhen(
@@ -70,6 +82,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     YoutubeModule,
     AuthModule,
     UsersModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
