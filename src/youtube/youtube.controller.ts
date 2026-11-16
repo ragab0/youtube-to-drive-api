@@ -8,6 +8,7 @@ import {
   BadRequestException,
   NotFoundException,
   HttpCode,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard.js';
@@ -87,22 +88,44 @@ export class YoutubeController {
   @ApiOperation({ summary: 'Check the status and result of an extraction job' })
   @ApiResponse({ status: 200, type: ExtractJobStatusDto })
   @Get('extract/status/:jobId')
-  async getExtractStatus(@Param('jobId') jobId: string) {
+  async getExtractStatus(
+    @CurrentUser() user: User,
+    @Param('jobId') jobId: string,
+  ) {
     const status = await this.jobsService.getExtractJobStatus(jobId);
     if (!status) {
       throw new NotFoundException(`Extraction job with ID ${jobId} not found`);
     }
+
+    // Security: Only owner or admin can see the job
+    if (status.data.userId !== user.id && user.role !== 'admin') {
+      throw new ForbiddenException(
+        'You do not have permission to view this job',
+      );
+    }
+
     return status;
   }
 
   @ApiOperation({ summary: 'Check the status and progress of a download job' })
   @ApiResponse({ status: 200, type: DownloadJobStatusDto })
   @Get('download/status/:jobId')
-  async getDownloadStatus(@Param('jobId') jobId: string) {
+  async getDownloadStatus(
+    @CurrentUser() user: User,
+    @Param('jobId') jobId: string,
+  ) {
     const status = await this.jobsService.getDownloadJobStatus(jobId);
     if (!status) {
       throw new NotFoundException(`Download job with ID ${jobId} not found`);
     }
+
+    // Security: Only owner or admin can see the job
+    if (status.data.userId !== user.id && user.role !== 'admin') {
+      throw new ForbiddenException(
+        'You do not have permission to view this job',
+      );
+    }
+
     return status;
   }
 }
