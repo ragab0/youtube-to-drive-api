@@ -11,7 +11,6 @@ import { ConfigModule as AppConfigModule } from './config/config.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { YoutubeModule } from './youtube/youtube.module.js';
 import { User } from './users/user.entity.js';
-import { DevtoolsModule } from '@nestjs/devtools-integration';
 import { HealthModule } from './health/health.module.js';
 import { BullModule } from '@nestjs/bullmq';
 import { JobsModule } from './jobs/jobs.module.js';
@@ -21,12 +20,6 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
 @Module({
   imports: [
     AppConfigModule,
-    DevtoolsModule.registerAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        http: config.get<string>('NODE_ENV') !== 'production',
-      }),
-    }),
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

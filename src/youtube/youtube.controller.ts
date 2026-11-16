@@ -7,42 +7,51 @@ import {
   UseGuards,
   BadRequestException,
   NotFoundException,
+  HttpCode,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard.js';
 import { User } from '../users/user.entity.js';
-import { YoutubeService } from './youtube.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
+import { JobCreateResponseDto } from '../jobs/dto/jobs.dto.js';
 import {
-  DownloadRequestDto,
+  ExtractJobStatusDto,
   ExtractRequestDto,
-  ExtractResponseDto,
-} from './youtube.dto.js';
+} from './dto/youtube-extract.dto.js';
+import {
+  DownloadJobStatusDto,
+  DownloadRequestDto,
+} from './dto/youtube-download.dto.js';
 
 @ApiTags('youtube')
 @UseGuards(AuthGuard)
 @Controller('youtube')
 export class YoutubeController {
-  constructor(
-    private readonly youtubeService: YoutubeService,
-    private readonly jobsService: JobsService,
-  ) {}
+  constructor(private readonly jobsService: JobsService) {}
+
+  // 01] Post [extract, download];
 
   @ApiOperation({
-    summary: 'Extract video or playlist details from a YouTube URL',
+    summary: 'Extract video or playlist details from a YouTube URL (Async)',
     description:
-      'Uses the official YouTube Data API v3 to fetch metadata. Supports videos, playlists, shorts, and live streams.',
+      'Queues a background job to fetch metadata using the official YouTube Data API v3. Supports videos, playlists, shorts, and live streams.',
   })
   @ApiResponse({
-    status: 200,
-    description: 'Extracted metadata',
-    type: ExtractResponseDto,
+    status: 202,
+    description: 'Extraction job queued successfully',
+    type: JobCreateResponseDto,
   })
+  @HttpCode(202)
   @Post('extract')
-  async extract(@Body() body: ExtractRequestDto) {
+  async extract(@CurrentUser() user: User, @Body() body: ExtractRequestDto) {
     const { url } = body;
     if (!url) throw new BadRequestException('URL is required');
-    return await this.youtubeService.getInfo(url);
+    const jobId = await this.jobsService.addExtractJob(url, user.id);
+    return {
+      message: 'Extraction job queued successfully',
+      jobId,
+      statusUrl: `/api/youtube/extract/status/${jobId}`,
+    };
   }
 
   @ApiOperation({
@@ -51,17 +60,11 @@ export class YoutubeController {
       'Queues a background job to download media and upload it to the specified Drive path.',
   })
   @ApiResponse({
-    status: 201,
-    description: 'Job created successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        message: { type: 'string' },
-        jobId: { type: 'string' },
-        statusUrl: { type: 'string' },
-      },
-    },
+    status: 202,
+    description: 'Download job queued successfully',
+    type: JobCreateResponseDto,
   })
+  @HttpCode(202)
   @Post('download')
   async download(@CurrentUser() user: User, @Body() body: DownloadRequestDto) {
     const { urls, path } = body;
@@ -73,18 +76,32 @@ export class YoutubeController {
     const jobId = await this.jobsService.addDownloadJob(urls, path, user.id);
 
     return {
-      message: 'Download inquiry received successfully',
+      message: 'Download job queued successfully',
       jobId,
-      statusUrl: `/api/youtube/status/${jobId}`,
+      statusUrl: `/api/youtube/download/status/${jobId}`,
     };
   }
 
+  // 02] Get Status [extract, download];
+
+  @ApiOperation({ summary: 'Check the status and result of an extraction job' })
+  @ApiResponse({ status: 200, type: ExtractJobStatusDto })
+  @Get('extract/status/:jobId')
+  async getExtractStatus(@Param('jobId') jobId: string) {
+    const status = await this.jobsService.getExtractJobStatus(jobId);
+    if (!status) {
+      throw new NotFoundException(`Extraction job with ID ${jobId} not found`);
+    }
+    return status;
+  }
+
   @ApiOperation({ summary: 'Check the status and progress of a download job' })
-  @Get('status/:jobId')
-  async getStatus(@Param('jobId') jobId: string) {
+  @ApiResponse({ status: 200, type: DownloadJobStatusDto })
+  @Get('download/status/:jobId')
+  async getDownloadStatus(@Param('jobId') jobId: string) {
     const status = await this.jobsService.getDownloadJobStatus(jobId);
     if (!status) {
-      throw new NotFoundException(`Job with ID ${jobId} not found`);
+      throw new NotFoundException(`Download job with ID ${jobId} not found`);
     }
     return status;
   }
